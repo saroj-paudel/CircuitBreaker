@@ -2,6 +2,7 @@
 
 from circuitbreaker.errors import BlockedError
 from circuitbreaker.models import Decision, ToolCall, ToolKind, Verdict
+from circuitbreaker.rules import RuleEngine
 
-__all__ = ["BlockedError", "Decision", "ToolCall", "ToolKind", "Verdict"]
-__version__ = "0.0.1"
+__all__ = ["BlockedError", "Decision", "RuleEngine", "ToolCall", "ToolKind", "Verdict"]
+__version__ = "0.0.2"

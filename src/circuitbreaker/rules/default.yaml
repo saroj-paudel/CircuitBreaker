@@ -1,0 +1,298 @@
+# CircuitBreaker default rules.
+# Precedence: block > ask > allow > default. "ask" hands the action to the AI judge.
+# Path/arg globs: "*" = within one segment, "**" = across segments, "!x" = exclude,
+# "\*" = a literal star.
+version: 1
+default: ask
+
+# Shared lists (keys starting with "x-" are ignored by the loader).
+x-secret-paths: &secret_paths
+  - "**/.env"
+  - "**/.env.*"
+  - "!**/.env.example"
+  - "!**/.env.sample"
+  - "!**/.env.template"
+  - "**/.ssh/**"
+  - "**/.aws/**"
+  - "**/.gnupg/**"
+  - "**/.kube/config"
+  - "**/.docker/config.json"
+  - "**/.netrc"
+  - "**/.npmrc"
+  - "**/.pypirc"
+  - "**/.git-credentials"
+  - "**/id_rsa"
+  - "**/id_ed25519"
+  - "**/id_ecdsa"
+  - "**/*.pem"
+  - "/etc/shadow"
+  - "/etc/sudoers"
+
+x-dangerous-targets: &dangerous_targets
+  - "/"
+  - "/*"
+  - "/etc/**"
+  - "/boot/**"
+  - "/bin/**"
+  - "/sbin/**"
+  - "/lib/**"
+  - "/lib64/**"
+  - "/root/**"
+  - "/dev/**"
+  - "/proc/**"
+  - "/sys/**"
+  - "/usr"
+  - "/usr/*"
+  - "/var"
+  - "/var/*"
+  - "/home"
+  - "/home/*"
+  - "/opt"
+  - "/opt/*"
+  - "~"
+  - "~/*"
+  - "~/.*"
+  - '\*'        # a literal "*" argument (rm -rf *), not "any name"
+  - "."
+  - ".."
+  - "../**"
+
+x-project-relative: &project_relative
+  - "**"
+  - "!/**"
+  - "!~/**"
+  - "!~"
+  - "!.."
+  - "!../**"
+
+rules:
+  # ======================= shell: destructive =======================
+  - id: shell-rm-dangerous-target
+    description: Recursive delete of a root, home, system directory or bare wildcard.
+    kind: shell
+    action: block
+    match:
+      program_any: [rm]
+      flags_all: [r]
+      args_any: *dangerous_targets
+    feedback: Delete specific paths inside the project (for example ./build or ./dist) instead.
+
+  - id: shell-rm-no-preserve-root
+    description: rm --no-preserve-root disables the last safety net against deleting /.
+    kind: shell
+    action: block
+    match:
+      program_any: [rm]
+      flags_any: [no-preserve-root]
+
+  - id: shell-chmod-chown-dangerous-target
+    description: Recursive permission or ownership change on a root, home or system path.
+    kind: shell
+    action: block
+    match:
+      program_any: [chmod, chown, chgrp]
+      flags_any: [R, recursive]
+      args_any: *dangerous_targets
+    feedback: Limit permission changes to specific files inside the project.
+
+  - id: shell-disk-destruction
+    description: Formatting or wiping a disk.
+    kind: shell
+    action: block
+    match:
+      program_any: [mkfs*, wipefs]
+
+  - id: shell-dd-to-device
+    description: dd writing directly to a block device.
+    kind: shell
+    action: block
+    match:
+      program_any: [dd]
+      args_any: ["of=/dev/**"]
+
+  - id: shell-fork-bomb
+    description: Fork bomb.
+    kind: shell
+    action: block
+    match:
+      regex: ':\(\)\s*\{'
+
+  - id: shell-pipe-to-interpreter
+    description: Downloading and executing code in one step.
+    kind: shell
+    action: block
+    match:
+      regex: '\b(curl|wget|fetch)\b[^|;&]*\|\s*(sudo\s+)?((ba|z|da|k)?sh|python3?|perl|ruby|node)\b'
+    feedback: Download the script to a file, inspect it, then run it explicitly.
+
+  # ======================= shell: secrets =======================
+  - id: shell-read-secrets
+    description: Reading or copying credential and key files.
+    kind: shell
+    action: block
+    match:
+      program_any: [cat, less, more, head, tail, bat, strings, xxd, od, cp, mv, scp, rsync, tar, zip, base64, grep, rg, awk, sed, curl, wget]
+      args_any: *secret_paths
+    feedback: Secrets are off limits. Ask the user to provide the specific value you need.
+
+  - id: shell-touch-secrets
+    description: A command references a credential or key file.
+    kind: shell
+    action: ask
+    match:
+      program_any: ["*"]
+      args_any: *secret_paths
+
+  # ======================= shell: risky but sometimes legitimate =======================
+  - id: shell-find-destructive
+    description: find with -delete or -exec can modify many files.
+    kind: shell
+    action: ask
+    match:
+      program_any: [find]
+      tokens_any: ["-delete", "-exec", "-execdir", "-ok"]
+
+  - id: shell-git-force-push
+    description: git push --force can overwrite shared history.
+    kind: shell
+    action: ask
+    match:
+      regex: '\bgit\b.*\bpush\b.*\s(--force(?!-)|-[a-zA-Z]*f[a-zA-Z]*)(\s|$)'
+    feedback: Use --force-with-lease on your own feature branch, never on main.
+
+  - id: shell-git-destructive
+    description: git reset --hard or git clean -f discards uncommitted work.
+    kind: shell
+    action: ask
+    match:
+      regex: '\bgit\b.*\b(reset\b.*--hard|clean\b.*\s-[a-zA-Z]*f)'
+
+  # ======================= shell: safe read-only commands =======================
+  - id: shell-allow-readonly
+    description: Common read-only commands.
+    kind: shell
+    action: allow
+    match:
+      program_any: [ls, pwd, echo, printf, whoami, date, uname, which, wc, head, tail, cat, grep, rg, diff, sort, uniq, tree, stat, file, basename, dirname, "true", "false", id, hostname]
+
+  - id: shell-allow-git-readonly
+    description: Read-only git subcommands.
+    kind: shell
+    action: allow
+    match:
+      program_any: [git]
+      subcommand_any: [status, diff, log, show, rev-parse, ls-files, blame, describe]
+
+  # ======================= files =======================
+  - id: file-secrets
+    description: Credential and key files must not be read or modified by the agent.
+    kind: [file_read, file_write]
+    action: block
+    match:
+      path_any: *secret_paths
+    feedback: Secrets are off limits. Ask the user to provide the specific value you need.
+
+  - id: file-system-write
+    description: Writing to system directories or raw devices.
+    kind: file_write
+    action: block
+    match:
+      path_any: ["/etc/**", "/boot/**", "/bin/**", "/sbin/**", "/usr/**", "/lib/**", "/dev/sd*", "/dev/nvme*", "/dev/hd*", "/dev/disk*"]
+
+  - id: file-git-internals
+    description: Writing inside .git can plant hooks or rewrite history.
+    kind: file_write
+    action: block
+    match:
+      path_any: ["**/.git/**"]
+    feedback: Use git commands instead of editing .git directly.
+
+  - id: file-persistence-and-ci
+    description: Shell startup files and CI workflows can run code later.
+    kind: file_write
+    action: ask
+    match:
+      path_any: ["~/.bashrc", "~/.zshrc", "~/.profile", "~/.bash_profile", "**/.github/workflows/**"]
+
+  - id: file-read-project
+    description: Reading files inside the project.
+    kind: file_read
+    action: allow
+    match:
+      path_any: *project_relative
+
+  - id: file-write-project
+    description: Writing files inside the project.
+    kind: file_write
+    action: allow
+    match:
+      path_any: *project_relative
+
+  # ======================= http =======================
+  - id: http-cloud-metadata
+    description: Cloud metadata endpoints hand out credentials.
+    kind: http
+    action: block
+    match:
+      host_any: ["169.254.*", "metadata.google.internal", "metadata.goog", "100.100.100.200", "fd00:ec2::254"]
+
+  - id: http-internal-network
+    description: Requests to localhost or private networks.
+    kind: http
+    action: ask
+    match:
+      host_any: [localhost, "127.*", "10.*", "192.168.*", "::1", "0.0.0.0"]
+
+  - id: http-allow-registries
+    description: Read-only access to well-known package and documentation hosts.
+    kind: http
+    action: allow
+    match:
+      host_any: [pypi.org, files.pythonhosted.org, registry.npmjs.org, github.com, api.github.com, raw.githubusercontent.com, docs.python.org]
+      method_any: [GET, HEAD]
+
+  # ======================= sql =======================
+  - id: sql-drop
+    description: DROP removes schema objects permanently.
+    kind: sql
+    action: block
+    match:
+      regex: '\bdrop\s+(table|database|schema|index|view|user|role)\b'
+    feedback: Use a reversible migration, or ask the user to run destructive DDL themselves.
+
+  - id: sql-truncate
+    description: TRUNCATE removes every row.
+    kind: sql
+    action: block
+    match:
+      regex: '\btruncate\b'
+
+  - id: sql-delete-without-where
+    description: DELETE without a WHERE clause removes every row.
+    kind: sql
+    action: block
+    match:
+      regex: '^delete\s+from\s+\S+(?!.*\bwhere\b)'
+    feedback: Add a WHERE clause that targets specific rows.
+
+  - id: sql-update-without-where
+    description: UPDATE without a WHERE clause changes every row.
+    kind: sql
+    action: block
+    match:
+      regex: '^update\s+\S+\s+set\b(?!.*\bwhere\b)'
+    feedback: Add a WHERE clause that targets specific rows.
+
+  - id: sql-tautology-where
+    description: WHERE 1=1 or WHERE true still affects every row.
+    kind: sql
+    action: block
+    match:
+      regex: '^(delete\s+from|update)\b.*\bwhere\s+(1\s*=\s*1|true)\s*$'
+
+  - id: sql-privileges
+    description: Changing users or privileges.
+    kind: sql
+    action: ask
+    match:
+      regex: '^(grant|revoke|create\s+user|alter\s+user)\b'
