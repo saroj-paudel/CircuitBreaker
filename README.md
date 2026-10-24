@@ -20,6 +20,17 @@ python -m circuitbreaker.rules sql "DELETE FROM users"     # block
 
 See [docs/rules.md](docs/rules.md) for the rule format.
 
+## Protect an MCP server
+
+Put the proxy in front of any stdio MCP server (put the original command after `--`):
+
+```bash
+circuitbreaker-proxy -- npx -y @modelcontextprotocol/server-filesystem .
+circuitbreaker-proxy --mode monitor -- <server command>   # log only, to tune rules first
+```
+
+See [docs/proxy.md](docs/proxy.md) for agent configuration, options and limits.
+
 ## Development
 
 ```bash

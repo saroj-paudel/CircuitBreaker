@@ -6,7 +6,6 @@ from circuitbreaker.rules import RuleEngine, parse_ruleset
 A, B, K = Decision.ALLOW, Decision.BLOCK, Decision.ASK
 
 
-
 @pytest.fixture(scope="module")
 def engine():
     return RuleEngine.from_default()
