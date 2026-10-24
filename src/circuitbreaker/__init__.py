@@ -5,4 +5,4 @@ from circuitbreaker.models import Decision, ToolCall, ToolKind, Verdict
 from circuitbreaker.rules import RuleEngine
 
 __all__ = ["BlockedError", "Decision", "RuleEngine", "ToolCall", "ToolKind", "Verdict"]
-__version__ = "0.0.2"
+__version__ = "0.0.3"

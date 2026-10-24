@@ -80,11 +80,15 @@ def matches_patterns(value: str, patterns: list[str]) -> bool:
 _HOME_VAR = re.compile(r"\$(?:\{HOME\}|HOME(?![A-Za-z0-9_]))")
 
 
+def _home_dir() -> str:
+    return os.path.expanduser("~").replace("\\", "/").rstrip("/")
+
+
 def normalize_path(raw: str) -> str:
     """Canonical path: `$HOME`/home dir -> `~`, `//` and `..` collapsed, `\\` -> `/`."""
     p = raw.strip().replace("\\", "/")
     p = _HOME_VAR.sub("~", p)
-    home = os.path.expanduser("~").replace("\\", "/").rstrip("/")
+    home = _home_dir()
     if home and (p == home or p.startswith(home + "/")):
         p = "~" + p[len(home) :]
     p = re.sub(r"^/{2,}", "/", p)
