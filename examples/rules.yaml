@@ -1,0 +1,42 @@
+version: 1
+default: ask
+
+rules:
+  - id: block-credential-files
+    description: Credential files must not be read or modified by the agent.
+    kind: [file_read, file_write]
+    action: block
+    match:
+      path_any:
+        - "**/.env"
+        - "**/.env.*"
+        - "!**/.env.example"
+        - "**/.ssh/**"
+        - "**/.aws/**"
+        - "**/.kube/config"
+    feedback: Ask the user to provide only the specific value needed.
+
+  - id: block-recursive-root-delete
+    description: Recursive deletion of root or system locations is blocked.
+    kind: shell
+    action: block
+    match:
+      program_any: [rm]
+      flags_all: [r]
+      args_any:
+        - /
+        - /etc/**
+        - /usr/**
+        - /var/**
+        - "~"
+        - "~/"
+        - "../**"
+    feedback: Restrict deletion to a specific project directory.
+
+  - id: allow-read-only-git
+    description: Allow common read-only git commands.
+    kind: shell
+    action: allow
+    match:
+      program_any: [git]
+      subcommand_any: [status, diff, log, show]

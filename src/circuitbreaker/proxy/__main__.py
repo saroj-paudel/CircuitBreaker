@@ -27,7 +27,7 @@ def main(argv: list[str] | None = None) -> int:
     own, upstream = (argv[: argv.index("--")], argv[argv.index("--") + 1 :]) if "--" in argv else (argv, [])  # noqa: E501
 
     parser = argparse.ArgumentParser(
-        prog="python -m circuitbreaker.proxy",
+        prog="circuitbreaker run",
         usage="%(prog)s [--rules FILE] [--mode {enforce,monitor}] [-v] -- <server command ...>",
         description="Security proxy between an AI agent and an MCP server.",
     )

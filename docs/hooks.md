@@ -54,7 +54,7 @@ pip install -e ".[dev]"   # from the repo root
         "hooks": [
           {
             "type": "command",
-            "command": "python -m circuitbreaker.hooks --agent claude_code"
+            "command": "circuitbreaker hook --agent claude_code"
           }
         ]
       }
@@ -65,13 +65,13 @@ pip install -e ".[dev]"   # from the repo root
 
 > **Windows:** use the full path to the venv Python if it is not on PATH:
 > ```json
-> "command": "C:\\Users\\you\\Projects\\CircuitBreaker\\.venv\\Scripts\\python.exe -m circuitbreaker.hooks --agent claude_code"
+> "command": "C:\\Users\\you\\Projects\\CircuitBreaker\\.venv\\Scripts\\circuitbreaker.exe hook --agent claude_code"
 > ```
 
 **3 — (Optional) point at your own rules file:**
 
 ```json
-"command": "python -m circuitbreaker.hooks --agent claude_code --rules my_rules.yaml"
+"command": "circuitbreaker hook --agent claude_code --rules my_rules.yaml"
 ```
 
 ### Verify it works
@@ -87,7 +87,7 @@ You should see Claude receive a "blocked" response and suggest an alternative.
 ### Monitor mode (tune before you enforce)
 
 ```json
-"command": "python -m circuitbreaker.hooks --agent claude_code --mode monitor"
+"command": "circuitbreaker hook --agent claude_code --mode monitor"
 ```
 
 In monitor mode every decision is logged to stderr, but nothing is blocked.
@@ -116,7 +116,7 @@ JSON to **stdout**.
 ```yaml
 shell_hooks:
   pre:
-    - command: python -m circuitbreaker.hooks --agent codex
+    - command: circuitbreaker hook --agent codex
 ```
 
 **Windows:**
@@ -124,7 +124,7 @@ shell_hooks:
 ```yaml
 shell_hooks:
   pre:
-    - command: C:\Users\you\Projects\CircuitBreaker\.venv\Scripts\python.exe -m circuitbreaker.hooks --agent codex
+    - command: C:\Users\you\Projects\CircuitBreaker\.venv\Scripts\circuitbreaker.exe hook --agent codex
 ```
 
 ### Monitor mode
@@ -132,7 +132,7 @@ shell_hooks:
 ```yaml
 shell_hooks:
   pre:
-    - command: python -m circuitbreaker.hooks --agent codex --mode monitor
+    - command: circuitbreaker hook --agent codex --mode monitor
 ```
 
 ---

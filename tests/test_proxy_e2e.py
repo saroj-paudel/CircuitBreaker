@@ -36,7 +36,7 @@ def rules_file(tmp_path_factory):
 class ProxyProc:
     def __init__(self, *proxy_args, audit_file=None):
         audit_args = ["--audit-log", str(audit_file)] if audit_file else []
-        cmd = [sys.executable, "-m", "circuitbreaker.proxy", *proxy_args, *audit_args, "--",
+        cmd = [sys.executable, "-m", "circuitbreaker", "run", *proxy_args, *audit_args, "--",
                sys.executable, FAKE_SERVER]  # fmt: skip
         self.proc = subprocess.Popen(
             cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL

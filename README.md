@@ -6,44 +6,50 @@ tamper-evident audit log for every decision.
 
 > Status: early development. See CHECKPOINT.md.
 
-## Try the rule engine
+## Quickstart
+
+See the [quickstart guide](docs/quickstart.md) for installation, MCP setup, hooks, and audit
+verification.
+
+Install CircuitBreaker into the Python environment used by your agent:
 
 ```bash
-python -m circuitbreaker.rules shell "rm  -fr  /"          # block
-python -m circuitbreaker.rules shell "bash -c 'ls; rm -rf /'"  # block
-python -m circuitbreaker.rules shell "git status"          # allow
-python -m circuitbreaker.rules shell "pip install requests" # ask (optional judge)
-python -m circuitbreaker.rules file_read ".env"            # block
-python -m circuitbreaker.rules http "http://2852039166/"   # block (cloud metadata IP)
-python -m circuitbreaker.rules sql "DELETE FROM users"     # block
+python -m pip install circuitbreaker
+circuitbreaker --help
 ```
 
-See [docs/rules.md](docs/rules.md) for the rule format.
-
-## Protect an MCP server
-
-Put the proxy in front of any stdio MCP server (put the original command after `--`):
+To protect an MCP server, run it through the proxy:
 
 ```bash
-circuitbreaker-proxy -- npx -y @modelcontextprotocol/server-filesystem .
-circuitbreaker-proxy --mode monitor -- <server command>   # log only, to tune rules first
+circuitbreaker run --mode monitor -- npx -y @modelcontextprotocol/server-filesystem .
 ```
 
-See [docs/proxy.md](docs/proxy.md) for agent configuration, options and limits.
-An optional OpenAI-compatible risk judge can resolve ambiguous actions; see the
-[judge setup](docs/proxy.md#optional-risk-judge) and its data-sharing implications.
+Start with `--mode monitor` to review decisions without blocking tool calls. Switch to the
+default `enforce` mode once your rules are ready:
 
-## Verify the audit log
+```bash
+circuitbreaker run --rules examples/rules.yaml -- npx -y @modelcontextprotocol/server-filesystem .
+```
 
-Every proxy and hook decision is recorded by default in `~/.circuitbreaker/audit.jsonl`.
-Verify its hash chain with:
+The default policy is used unless `--rules` is supplied. A custom rules file replaces (it
+does not extend) the built-in policy; see [examples/rules.yaml](examples/rules.yaml) and
+[the rule guide](docs/rules.md).
+
+The MCP proxy and agent hooks write a tamper-evident decision log by default. Verify it:
 
 ```bash
 circuitbreaker-audit verify
 ```
+```
 
-See [docs/proxy.md](docs/proxy.md#audit-log) to choose a different log path and understand
-what data the log contains.
+The unified command also supports `circuitbreaker audit verify`, `circuitbreaker hook
+--agent claude_code`, and `circuitbreaker rules shell "git status"`. Full setup and data
+handling details are in [the proxy guide](docs/proxy.md) and
+[the agent hooks guide](docs/hooks.md).
+
+An optional OpenAI-compatible risk judge can resolve ambiguous actions. It is disabled
+unless configured and receives action targets/arguments when enabled; see the
+[judge setup](docs/proxy.md#optional-risk-judge) before using a remote endpoint.
 
 ## Development
 
