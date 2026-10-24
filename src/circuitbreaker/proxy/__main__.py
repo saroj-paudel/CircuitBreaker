@@ -11,6 +11,11 @@ import os
 import sys
 
 from circuitbreaker.audit import AuditLog, AuditLogError, default_audit_path
+from circuitbreaker.judge import (
+    JudgeConfigurationError,
+    add_judge_arguments,
+    build_judge,
+)
 from circuitbreaker.proxy.gate import Gate
 from circuitbreaker.proxy.interceptor import Interceptor
 from circuitbreaker.proxy.server import Proxy, ProxyError
@@ -33,6 +38,7 @@ def main(argv: list[str] | None = None) -> int:
         metavar="FILE",
         help=f"append decisions to this hash-chained JSONL file (default: {default_audit_path()})",
     )
+    add_judge_arguments(parser)
     parser.add_argument(
         "--mode",
         choices=["enforce", "monitor"],
@@ -51,6 +57,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     try:
         engine = RuleEngine.from_file(ns.rules) if ns.rules else RuleEngine.from_default()
+        judge = build_judge(
+            ns.judge_url,
+            ns.judge_model,
+            ns.judge_api_key_env,
+            ns.judge_timeout,
+        )
         audit_log = AuditLog(ns.audit_log)
     except RuleLoadError as exc:
         print(f"circuitbreaker: refusing to start: {exc}", file=sys.stderr)
@@ -58,12 +70,15 @@ def main(argv: list[str] | None = None) -> int:
     except AuditLogError as exc:
         print(f"circuitbreaker: cannot initialize audit log: {exc}", file=sys.stderr)
         return 2
+    except JudgeConfigurationError as exc:
+        print(f"circuitbreaker: invalid judge configuration: {exc}", file=sys.stderr)
+        return 2
 
     if ns.mode == "monitor":
         logging.getLogger("circuitbreaker").warning("MONITOR MODE: nothing is being blocked")
     try:
         return Proxy(
-            Interceptor(Gate(engine, mode=ns.mode, audit_log=audit_log)), upstream
+            Interceptor(Gate(engine, mode=ns.mode, audit_log=audit_log, judge=judge)), upstream
         ).run()
     except ProxyError as exc:
         print(f"circuitbreaker: {exc}", file=sys.stderr)

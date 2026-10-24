@@ -5,6 +5,7 @@ import json
 import subprocess
 import sys
 import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 from pathlib import Path
 
@@ -113,6 +114,52 @@ def test_ambiguous_action_is_denied_until_a_judge_exists(proxy):
     result = proxy.call("run_command", command="pip install requests")
     assert result["isError"] is True
     assert "approval" in result["content"][0]["text"].lower()
+
+
+def test_configured_json_judge_resolves_ask_through_proxy(rules_file):
+    class JudgeHandler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            assert request["messages"][1]["role"] == "user"
+            content = json.dumps(
+                {"decision": "allow", "reason": "Accepted for this test", "feedback": None}
+            )
+            body = json.dumps(
+                {"choices": [{"message": {"content": content}}]}
+            ).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *_args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), JudgeHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    audit_file = Path(rules_file).with_name("judge-audit.jsonl")
+    proxy = ProxyProc(
+        "--rules",
+        rules_file,
+        "--judge-url",
+        f"http://127.0.0.1:{server.server_port}/v1/chat/completions",
+        "--judge-model",
+        "test-model",
+        audit_file=audit_file,
+    )
+    try:
+        result = proxy.call("run_command", command="pip install requests")
+        assert result.get("isError") is None
+        assert "executed run_command" in result["content"][0]["text"]
+    finally:
+        if proxy.proc.poll() is None:
+            proxy.proc.kill()
+        proxy._watchdog.cancel()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
 
 
 def test_bad_json_is_rejected_and_proxy_keeps_working(proxy):

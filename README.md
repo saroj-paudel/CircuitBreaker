@@ -12,7 +12,7 @@ tamper-evident audit log for every decision.
 python -m circuitbreaker.rules shell "rm  -fr  /"          # block
 python -m circuitbreaker.rules shell "bash -c 'ls; rm -rf /'"  # block
 python -m circuitbreaker.rules shell "git status"          # allow
-python -m circuitbreaker.rules shell "pip install requests" # ask (AI judge, coming in M5)
+python -m circuitbreaker.rules shell "pip install requests" # ask (optional judge)
 python -m circuitbreaker.rules file_read ".env"            # block
 python -m circuitbreaker.rules http "http://2852039166/"   # block (cloud metadata IP)
 python -m circuitbreaker.rules sql "DELETE FROM users"     # block
@@ -30,6 +30,8 @@ circuitbreaker-proxy --mode monitor -- <server command>   # log only, to tune ru
 ```
 
 See [docs/proxy.md](docs/proxy.md) for agent configuration, options and limits.
+An optional OpenAI-compatible risk judge can resolve ambiguous actions; see the
+[judge setup](docs/proxy.md#optional-risk-judge) and its data-sharing implications.
 
 ## Verify the audit log
 

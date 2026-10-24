@@ -144,6 +144,9 @@ shell_hooks:
 | `--agent claude_code\|codex` | Required. Which agent protocol to speak. |
 | `--rules FILE` | Your rules YAML. Default: built-in rules. |
 | `--audit-log FILE` | Hash-chained JSONL decision log. Default: `~/.circuitbreaker/audit.jsonl`. |
+| `--judge-url URL` + `--judge-model NAME` | Opt in to an OpenAI-compatible judge for ambiguous actions. |
+| `--judge-api-key-env ENV` | API-key environment variable; default `CIRCUITBREAKER_JUDGE_API_KEY`. |
+| `--judge-timeout SECONDS` | Judge request timeout; default 20 seconds. |
 | `--mode enforce` | Default. Blocked/ambiguous calls are denied. |
 | `--mode monitor` | Log decisions and allow them unless the audit log fails. |
 | `-v` / `--verbose` | Log tool targets to stderr (may contain secrets). |
@@ -159,7 +162,7 @@ shell_hooks:
 | `Write` / `Edit` / `MultiEdit` / `NotebookEdit` | `file_write` | File write |
 | `WebFetch` | `http` / `fetch` | HTTP request |
 | `WebSearch` | — | HTTP (query string) |
-| Anything else | Anything else | `other` → ruleset default (ask → block) |
+| Anything else | Anything else | `other` → ruleset default (`ask`, then judge or block) |
 
 ---
 
@@ -201,3 +204,9 @@ for the full rule schema.  A few hook-specific examples:
 The hook appends decisions to `~/.circuitbreaker/audit.jsonl` by default. Override it with
 `--audit-log FILE`; verify the chain with `circuitbreaker-audit verify`. Audit write failures
 block actions even in monitor mode.
+
+To resolve ambiguous actions, pass both `--judge-url URL` and `--judge-model NAME`. The
+endpoint receives action targets and mapped arguments; only enable it if sending that data
+there is acceptable. See [proxy.md](proxy.md#optional-risk-judge) for response format,
+credential handling, and fail-closed behavior. Deterministic block rules are never sent to
+the judge.
