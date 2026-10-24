@@ -2,14 +2,50 @@
 
 ## Install
 
-Install CircuitBreaker into the same Python environment that launches your agent:
+CircuitBreaker requires Python 3.10 or newer. Clone the repository and install this checkout
+into the same Python environment that launches your agent:
 
 ```bash
-python -m pip install circuitbreaker
+git clone https://github.com/saroj-paudel/CircuitBreaker.git
+cd CircuitBreaker
+python -m venv .venv
+# PowerShell: .venv\Scripts\Activate.ps1
+# macOS/Linux: source .venv/bin/activate
+python -m pip install -e .
 circuitbreaker --help
 ```
 
-For local development, install the checked-out project with `python -m pip install -e .`.
+Choose the activation command for your shell from the comments above. Activation is
+optional if you use the environment's full paths. This installs the cloned source in
+editable mode; it does not assume a PyPI release exists.
+
+For development and tests, install the additional tools and run the checks:
+
+```bash
+python -m pip install -e ".[dev]"
+python -m pytest -q
+ruff check .
+```
+
+## Verify the clone locally
+
+This smoke test uses the repository's fake MCP server and does not need Node.js, an external
+server package, API key, or network service. From the repository root, start:
+
+```bash
+circuitbreaker run --mode monitor -- python tests/fake_mcp_server.py
+```
+
+Paste this JSON-RPC request into the running process and press Enter:
+
+```json
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"run_command","arguments":{"command":"rm -rf /"}}}
+```
+
+The fake server responds with `executed run_command`, demonstrating that monitor mode
+forwards the call. Restart without `--mode monitor` and repeat the request; the proxy should
+return a blocked tool result. **The fake server never runs the provided shell command**—it
+only records whether a tool call reached it. Use Ctrl+C to stop the proxy.
 
 ## Protect an MCP server
 
@@ -54,6 +90,10 @@ pass the original server command after `--`. For example:
 
 If `circuitbreaker` is not on the agent's PATH, use the Python executable from the
 environment where the package is installed and invoke `-m circuitbreaker`.
+
+For an actual filesystem MCP server, install Node.js first; this example uses `npx` to fetch
+`@modelcontextprotocol/server-filesystem`. CircuitBreaker does not install or manage the
+upstream server.
 
 ## Audit and hooks
 

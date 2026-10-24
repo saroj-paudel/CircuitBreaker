@@ -5,10 +5,16 @@ on:
     branches: [main]
 jobs:
   test:
-    runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10", "3.12"]
+        include:
+          - os: ubuntu-latest
+            python-version: "3.10"
+          - os: ubuntu-latest
+            python-version: "3.12"
+          - os: windows-latest
+            python-version: "3.12"
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

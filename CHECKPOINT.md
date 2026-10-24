@@ -9,6 +9,6 @@
 - [x] **M6 CLI + docs**: `circuitbreaker run`, quickstart, example rules, v0.1.0
 
 ## Proposed additions
-- [ ] **CI on Windows**: add `windows-latest` to the test matrix
+- [x] **CI on Windows**: add `windows-latest` to the test matrix
 - [ ] **M3b Agent hooks**: front-end for agents' built-in tools (shell/file), reusing `Gate`
 - [ ] **Windows shells**: PowerShell and cmd parsing, Windows path rules
