@@ -35,13 +35,17 @@ A non-zero exit code also signals a block.
 
 ### Installation
 
-**1 — Install CircuitBreaker** (if not already done):
+**1 — Clone and install CircuitBreaker** (if not already done):
 
 ```bash
-pip install -e ".[dev]"   # from the repo root
-# or, when published:
-# pip install circuitbreaker
+git clone https://github.com/saroj-paudel/CircuitBreaker.git
+cd CircuitBreaker
+python -m pip install -e .
 ```
+
+For development and tests, install `python -m pip install -e ".[dev]"` instead. The package
+is installed into the active Python environment; if the agent cannot find the executable,
+use the full path to that environment's `circuitbreaker` command.
 
 **2 — Edit `~/.claude/settings.json`**:
 
@@ -90,8 +94,9 @@ You should see Claude receive a "blocked" response and suggest an alternative.
 "command": "circuitbreaker hook --agent claude_code --mode monitor"
 ```
 
-In monitor mode every decision is logged to stderr, but nothing is blocked.
-Watch the logs, adjust your rules, then switch back to `enforce`.
+In monitor mode every decision is logged to stderr and actions are normally allowed.
+Audit-log failures still block actions. Watch the logs, adjust your rules, then switch back
+to `enforce`.
 
 ---
 
