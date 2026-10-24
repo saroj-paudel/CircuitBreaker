@@ -33,8 +33,9 @@ def rules_file(tmp_path_factory):
 
 
 class ProxyProc:
-    def __init__(self, *proxy_args):
-        cmd = [sys.executable, "-m", "circuitbreaker.proxy", *proxy_args, "--",
+    def __init__(self, *proxy_args, audit_file=None):
+        audit_args = ["--audit-log", str(audit_file)] if audit_file else []
+        cmd = [sys.executable, "-m", "circuitbreaker.proxy", *proxy_args, *audit_args, "--",
                sys.executable, FAKE_SERVER]  # fmt: skip
         self.proc = subprocess.Popen(
             cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
@@ -75,7 +76,8 @@ class ProxyProc:
 
 @pytest.fixture
 def proxy(rules_file):
-    p = ProxyProc("--rules", rules_file)
+    audit_file = Path(rules_file).with_name("proxy-audit.jsonl")
+    p = ProxyProc("--rules", rules_file, audit_file=audit_file)
     yield p
     if p.proc.poll() is None:
         p.proc.kill()
@@ -120,7 +122,8 @@ def test_bad_json_is_rejected_and_proxy_keeps_working(proxy):
 
 
 def test_monitor_mode_forwards_everything(rules_file):
-    p = ProxyProc("--rules", rules_file, "--mode", "monitor")
+    audit_file = Path(rules_file).with_name("monitor-audit.jsonl")
+    p = ProxyProc("--rules", rules_file, "--mode", "monitor", audit_file=audit_file)
     try:
         assert p.text("run_command", command="rm -rf /") == "executed run_command"
     finally:
@@ -131,6 +134,19 @@ def test_monitor_mode_forwards_everything(rules_file):
 def test_proxy_exits_cleanly_when_client_disconnects(proxy):
     proxy.call("run_command", command="ls")
     assert proxy.close() == 0
+
+
+def test_proxy_persists_decisions_and_audit_cli_verifies_them(proxy, rules_file):
+    audit_file = Path(rules_file).with_name("proxy-audit.jsonl")
+    proxy.call("run_command", command="ls")
+    result = subprocess.run(
+        [sys.executable, "-m", "circuitbreaker.audit", "verify", str(audit_file)],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0
+    assert "entries" in result.stdout
 
 
 def test_refuses_to_start_with_invalid_rules(tmp_path):

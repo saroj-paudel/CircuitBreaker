@@ -94,6 +94,18 @@ def test_on_decision_receives_record_and_errors_are_contained(engine):
     assert Gate(engine, on_decision=boom).check("run_command", {"command": "ls"}).proceed
 
 
+def test_audit_failure_blocks_call_and_reports_audit_source(engine):
+    def audit_failure(_):
+        raise OSError("disk full")
+
+    record = Gate(engine, audit_log=audit_failure).check(
+        "run_command", {"command": "ls"}
+    )
+    assert record.verdict.decision is B
+    assert record.verdict.source == "audit"
+    assert not record.proceed
+
+
 BY_NAME = """
 default: ask
 rules:

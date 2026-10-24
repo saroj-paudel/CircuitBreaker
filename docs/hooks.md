@@ -143,8 +143,9 @@ shell_hooks:
 |---|---|
 | `--agent claude_code\|codex` | Required. Which agent protocol to speak. |
 | `--rules FILE` | Your rules YAML. Default: built-in rules. |
+| `--audit-log FILE` | Hash-chained JSONL decision log. Default: `~/.circuitbreaker/audit.jsonl`. |
 | `--mode enforce` | Default. Blocked/ambiguous calls are denied. |
-| `--mode monitor` | Log decisions; always return "allow". |
+| `--mode monitor` | Log decisions and allow them unless the audit log fails. |
 | `-v` / `--verbose` | Log tool targets to stderr (may contain secrets). |
 
 ---
@@ -193,5 +194,10 @@ for the full rule schema.  A few hook-specific examples:
 - Missing `tool_name` / `type` → block.
 - Internal error → block.
 - A crashing or timing-out judge → block.
+- If the audit log cannot record a decision, the action is blocked.
 - Invalid rules file → hook exits with code 2 at startup (Claude Code / Codex will see the
   subprocess fail and refuse to start).
+
+The hook appends decisions to `~/.circuitbreaker/audit.jsonl` by default. Override it with
+`--audit-log FILE`; verify the chain with `circuitbreaker-audit verify`. Audit write failures
+block actions even in monitor mode.

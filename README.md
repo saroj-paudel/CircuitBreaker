@@ -31,6 +31,18 @@ circuitbreaker-proxy --mode monitor -- <server command>   # log only, to tune ru
 
 See [docs/proxy.md](docs/proxy.md) for agent configuration, options and limits.
 
+## Verify the audit log
+
+Every proxy and hook decision is recorded by default in `~/.circuitbreaker/audit.jsonl`.
+Verify its hash chain with:
+
+```bash
+circuitbreaker-audit verify
+```
+
+See [docs/proxy.md](docs/proxy.md#audit-log) to choose a different log path and understand
+what data the log contains.
+
 ## Development
 
 ```bash

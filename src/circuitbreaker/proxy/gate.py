@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Literal, Protocol
 
 from circuitbreaker.models import Decision, ToolCall, Verdict
@@ -65,12 +65,14 @@ class Gate:
         judge: Judge | None = None,
         mode: Mode = "enforce",
         on_decision: Callable[[DecisionRecord], None] | None = None,
+        audit_log: Callable[[DecisionRecord], None] | None = None,
     ) -> None:
         self.engine = engine
         self.mapper = mapper or ToolMapper()
         self.judge = judge
         self.mode = mode
         self.on_decision = on_decision
+        self.audit_log = audit_log
 
     def check(self, tool_name: str, arguments: Any, agent_id: str = "unknown") -> DecisionRecord:
         mapped = self.mapper.map(tool_name, arguments, agent_id)
@@ -104,6 +106,21 @@ class Gate:
             proceed=final.decision is Decision.ALLOW or self.mode == "monitor",
             mode=self.mode,
         )
+        if self.audit_log is not None:
+            try:
+                self.audit_log(record)
+            except Exception:
+                log.exception("audit log append failed; blocking action")
+                record = replace(
+                    record,
+                    verdict=Verdict(
+                        decision=Decision.BLOCK,
+                        reason="The audit log could not record this action, so it was blocked.",
+                        feedback="Restore audit-log access before retrying this action.",
+                        source="audit",
+                    ),
+                    proceed=False,
+                )
         self._log(record)
         if self.on_decision is not None:
             try:

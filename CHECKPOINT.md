@@ -4,7 +4,7 @@
 - [x] **M2 YAML rule engine**: load rules, match shell/file/http/sql, normalise commands
 - [x] **M3 Proxy skeleton**: MCP stdio proxy, tool-call mapping, forward or block, monitor mode
 - [x] **M3b Agent hooks**: pre-tool hook front-end for Claude Code / Antigravity and Codex, reusing `Gate`
-- [ ] **M4 Audit log**: append-only JSONL, hash-chained, `verify` command
+- [x] **M4 Audit log**: append-only JSONL, hash-chained, `verify` command
 - [ ] **M5 AI risk judge**: pluggable LLM client, JSON verdict, fail-closed
 - [ ] **M6 CLI + docs**: `circuitbreaker run`, quickstart, example rules, v0.1.0
 
