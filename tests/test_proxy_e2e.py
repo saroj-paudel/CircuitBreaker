@@ -5,6 +5,7 @@ import json
 import subprocess
 import sys
 import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 from pathlib import Path
 
@@ -33,8 +34,9 @@ def rules_file(tmp_path_factory):
 
 
 class ProxyProc:
-    def __init__(self, *proxy_args):
-        cmd = [sys.executable, "-m", "circuitbreaker.proxy", *proxy_args, "--",
+    def __init__(self, *proxy_args, audit_file=None):
+        audit_args = ["--audit-log", str(audit_file)] if audit_file else []
+        cmd = [sys.executable, "-m", "circuitbreaker.proxy", *proxy_args, *audit_args, "--",
                sys.executable, FAKE_SERVER]  # fmt: skip
         self.proc = subprocess.Popen(
             cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
@@ -75,7 +77,8 @@ class ProxyProc:
 
 @pytest.fixture
 def proxy(rules_file):
-    p = ProxyProc("--rules", rules_file)
+    audit_file = Path(rules_file).with_name("proxy-audit.jsonl")
+    p = ProxyProc("--rules", rules_file, audit_file=audit_file)
     yield p
     if p.proc.poll() is None:
         p.proc.kill()
@@ -113,6 +116,52 @@ def test_ambiguous_action_is_denied_until_a_judge_exists(proxy):
     assert "approval" in result["content"][0]["text"].lower()
 
 
+def test_configured_json_judge_resolves_ask_through_proxy(rules_file):
+    class JudgeHandler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            assert request["messages"][1]["role"] == "user"
+            content = json.dumps(
+                {"decision": "allow", "reason": "Accepted for this test", "feedback": None}
+            )
+            body = json.dumps(
+                {"choices": [{"message": {"content": content}}]}
+            ).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *_args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), JudgeHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    audit_file = Path(rules_file).with_name("judge-audit.jsonl")
+    proxy = ProxyProc(
+        "--rules",
+        rules_file,
+        "--judge-url",
+        f"http://127.0.0.1:{server.server_port}/v1/chat/completions",
+        "--judge-model",
+        "test-model",
+        audit_file=audit_file,
+    )
+    try:
+        result = proxy.call("run_command", command="pip install requests")
+        assert result.get("isError") is None
+        assert "executed run_command" in result["content"][0]["text"]
+    finally:
+        if proxy.proc.poll() is None:
+            proxy.proc.kill()
+        proxy._watchdog.cancel()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
 def test_bad_json_is_rejected_and_proxy_keeps_working(proxy):
     proxy.send_raw(b"this is not json\n")
     assert proxy.recv()["error"]["code"] == -32700
@@ -120,7 +169,8 @@ def test_bad_json_is_rejected_and_proxy_keeps_working(proxy):
 
 
 def test_monitor_mode_forwards_everything(rules_file):
-    p = ProxyProc("--rules", rules_file, "--mode", "monitor")
+    audit_file = Path(rules_file).with_name("monitor-audit.jsonl")
+    p = ProxyProc("--rules", rules_file, "--mode", "monitor", audit_file=audit_file)
     try:
         assert p.text("run_command", command="rm -rf /") == "executed run_command"
     finally:
@@ -131,6 +181,19 @@ def test_monitor_mode_forwards_everything(rules_file):
 def test_proxy_exits_cleanly_when_client_disconnects(proxy):
     proxy.call("run_command", command="ls")
     assert proxy.close() == 0
+
+
+def test_proxy_persists_decisions_and_audit_cli_verifies_them(proxy, rules_file):
+    audit_file = Path(rules_file).with_name("proxy-audit.jsonl")
+    proxy.call("run_command", command="ls")
+    result = subprocess.run(
+        [sys.executable, "-m", "circuitbreaker.audit", "verify", str(audit_file)],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0
+    assert "entries" in result.stdout
 
 
 def test_refuses_to_start_with_invalid_rules(tmp_path):

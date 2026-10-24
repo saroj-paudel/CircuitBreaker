@@ -17,6 +17,7 @@ dependencies = [
 [project.scripts]
 circuitbreaker-proxy = "circuitbreaker.proxy.__main__:run"
 circuitbreaker-hook = "circuitbreaker.hooks.__main__:run"
+circuitbreaker-audit = "circuitbreaker.audit:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "ruff>=0.5"]

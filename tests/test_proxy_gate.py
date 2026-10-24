@@ -1,5 +1,6 @@
 import pytest
 
+from circuitbreaker.judge import JsonRiskJudge
 from circuitbreaker.models import Decision, ToolCall, Verdict
 from circuitbreaker.proxy import Gate
 from circuitbreaker.rules import RuleEngine, parse_ruleset
@@ -21,6 +22,16 @@ class StubJudge:
         if self.error:
             raise self.error
         return self.verdict
+
+
+class StaticLLMClient:
+    def __init__(self, response):
+        self.response = response
+        self.calls = 0
+
+    def complete(self, *, system_prompt, user_prompt):
+        self.calls += 1
+        return self.response
 
 
 def verdict(decision, reason="because"):
@@ -64,6 +75,7 @@ def test_judge_can_allow_an_ask(engine):
     judge = StubJudge(verdict(A))
     rec = Gate(engine, judge=judge).check("run_command", {"command": "pip install requests"})
     assert rec.verdict.decision is A and rec.proceed and len(judge.calls) == 1
+    assert rec.verdict.source == "judge"
 
 
 def test_judge_is_never_consulted_for_hard_blocks_or_allows(engine):
@@ -72,6 +84,30 @@ def test_judge_is_never_consulted_for_hard_blocks_or_allows(engine):
     assert not gate.check("run_command", {"command": "rm -rf /"}).proceed
     assert gate.check("run_command", {"command": "ls"}).proceed
     assert judge.calls == []
+
+
+def test_json_judge_is_only_called_for_ambiguous_actions(engine):
+    client = StaticLLMClient(
+        '{"decision":"allow","reason":"accepted","feedback":null}'
+    )
+    judge = JsonRiskJudge(client)
+    gate = Gate(engine, judge=judge)
+
+    assert gate.check("run_command", {"command": "rm -rf /"}).verdict.decision is B
+    assert gate.check("run_command", {"command": "ls"}).verdict.decision is A
+    assert client.calls == 0
+    assert gate.check("run_command", {"command": "pip install x"}).verdict.decision is A
+    assert client.calls == 1
+
+
+def test_invalid_json_judge_response_fails_closed(engine):
+    client = StaticLLMClient("not json")
+    record = Gate(engine, judge=JsonRiskJudge(client)).check(
+        "run_command", {"command": "pip install x"}
+    )
+    assert record.verdict.decision is B
+    assert record.verdict.source == "judge"
+    assert not record.proceed
 
 
 @pytest.mark.parametrize(
@@ -92,6 +128,18 @@ def test_on_decision_receives_record_and_errors_are_contained(engine):
         raise RuntimeError("audit down")
 
     assert Gate(engine, on_decision=boom).check("run_command", {"command": "ls"}).proceed
+
+
+def test_audit_failure_blocks_call_and_reports_audit_source(engine):
+    def audit_failure(_):
+        raise OSError("disk full")
+
+    record = Gate(engine, audit_log=audit_failure).check(
+        "run_command", {"command": "ls"}
+    )
+    assert record.verdict.decision is B
+    assert record.verdict.source == "audit"
+    assert not record.proceed
 
 
 BY_NAME = """

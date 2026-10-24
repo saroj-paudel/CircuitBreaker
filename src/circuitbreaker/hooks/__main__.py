@@ -14,6 +14,12 @@ import argparse
 import logging
 import sys
 
+from circuitbreaker.audit import AuditLog, AuditLogError, default_audit_path
+from circuitbreaker.judge import (
+    JudgeConfigurationError,
+    add_judge_arguments,
+    build_judge,
+)
 from circuitbreaker.proxy.gate import Gate
 from circuitbreaker.rules import RuleEngine, RuleLoadError
 
@@ -30,6 +36,13 @@ def main(argv: list[str] | None = None) -> int:
         help="Which agent's hook protocol to speak.",
     )
     parser.add_argument("--rules", help="Rules YAML (default: built-in rules).")
+    parser.add_argument(
+        "--audit-log",
+        default=str(default_audit_path()),
+        metavar="FILE",
+        help=f"append decisions to this hash-chained JSONL file (default: {default_audit_path()})",
+    )
+    add_judge_arguments(parser)
     parser.add_argument(
         "--mode",
         choices=["enforce", "monitor"],
@@ -55,11 +68,26 @@ def main(argv: list[str] | None = None) -> int:
     except RuleLoadError as exc:
         print(f"circuitbreaker-hook: refusing to start: {exc}", file=sys.stderr)
         return 2
+    try:
+        judge = build_judge(
+            ns.judge_url,
+            ns.judge_model,
+            ns.judge_api_key_env,
+            ns.judge_timeout,
+        )
+    except JudgeConfigurationError as exc:
+        print(f"circuitbreaker-hook: invalid judge configuration: {exc}", file=sys.stderr)
+        return 2
+    try:
+        audit_log = AuditLog(ns.audit_log)
+    except AuditLogError as exc:
+        print(f"circuitbreaker-hook: cannot initialize audit log: {exc}", file=sys.stderr)
+        return 2
 
     if ns.mode == "monitor":
         logging.getLogger("circuitbreaker").warning("MONITOR MODE: nothing is being blocked")
 
-    gate = Gate(engine, mode=ns.mode)
+    gate = Gate(engine, mode=ns.mode, audit_log=audit_log, judge=judge)
 
     if ns.agent == "claude_code":
         from circuitbreaker.hooks.claude_code import run_stdio

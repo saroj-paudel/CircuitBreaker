@@ -41,8 +41,12 @@ Run it by hand to see it work: `python -m circuitbreaker.proxy -- <server comman
 | Option | Meaning |
 |---|---|
 | `--rules FILE` | Your rules YAML. Default: built-in rules. An invalid file stops startup. |
-| `--mode enforce` | Default. Blocked and ambiguous calls never reach the server. |
-| `--mode monitor` | Decisions are logged to stderr but everything is forwarded. Use it to tune rules on real traffic before enforcing. |
+| `--audit-log FILE` | Hash-chained JSONL decision log. Default: `~/.circuitbreaker/audit.jsonl`. |
+| `--judge-url URL` + `--judge-model NAME` | Opt in to an OpenAI-compatible JSON risk judge for ambiguous (`ask`) actions. |
+| `--judge-api-key-env ENV` | Environment variable for the judge API key. Default: `CIRCUITBREAKER_JUDGE_API_KEY`. |
+| `--judge-timeout SECONDS` | Judge request timeout. Default: 20 seconds. |
+| `--mode enforce` | Default. Actions denied by the rules or judge never reach the server. |
+| `--mode monitor` | Decisions are logged to stderr and forwarded unless the audit log fails. Use it to tune rules before enforcing. |
 | `-v` | Also log call targets (commands, paths). Off by default because they can contain secrets. |
 
 Logs go to **stderr**. stdout is the protocol channel and carries only JSON-RPC.
@@ -56,11 +60,50 @@ Logs go to **stderr**. stdout is the protocol channel and carries only JSON-RPC.
 3. **allow** forwards the original bytes untouched. **block** answers the agent with a tool
    error (`isError: true`) that explains why and suggests an alternative, so the model can
    adapt. The server never sees the request.
-4. **ask** (no rule decided) is denied for now with an "needs approval" message. In M5 the
-   AI risk judge resolves these.
+4. **ask** (no rule decided) is denied with a "needs approval" message unless an optional
+   judge is configured. The judge can allow or block ambiguous actions; deterministic
+   `block` rules always take precedence.
+5. Every decision is appended to the audit log before the call is forwarded or blocked. If
+   the log cannot be written, the action is blocked.
 
-Tools the mapper cannot classify become `kind: other` and fall to the ruleset default (ask),
-so unknown tools are denied until you say otherwise.
+## Audit log
+
+The proxy and agent hooks append each decision to `~/.circuitbreaker/audit.jsonl` by default.
+Override the location with `--audit-log FILE`. Records include tool targets and decision
+reasons, which may contain sensitive command text or paths; protect the file accordingly.
+Appends are serialized across concurrent processes, flushed to disk, and linked using
+SHA-256 hashes. A write failure blocks the action, including in monitor mode. Verify the
+full chain with:
+
+```bash
+circuitbreaker-audit verify
+circuitbreaker-audit verify path/to/audit.jsonl
+```
+
+Verification reports the first malformed or modified line. The hash chain is tamper-evident,
+not a signature: anyone who can rewrite the entire log can recompute its hashes.
+
+## Optional risk judge
+
+The judge is disabled by default. To opt in, provide an OpenAI-compatible chat-completions
+endpoint and model to either `circuitbreaker-proxy` or `circuitbreaker-hook`:
+
+```bash
+circuitbreaker-proxy --judge-url http://127.0.0.1:8000/v1/chat/completions \
+  --judge-model local-model -- <server command>
+```
+
+For remote endpoints, use HTTPS and set `CIRCUITBREAKER_JUDGE_API_KEY`; choose another
+environment variable with `--judge-api-key-env NAME`, or set it to an empty string for an
+endpoint that does not require a key. The `--judge-timeout` option bounds each request.
+The configured endpoint receives the action target and mapped arguments, so only enable it
+when that data may be sent to the endpoint. The judge must return a JSON object with
+`decision` (`allow` or `block`), `reason`, and optional `feedback`; malformed responses,
+request failures, and timeouts fail closed. This is a provider-neutral transport contract,
+not a guarantee that model judgments are correct; the specific model can be selected later.
+
+Tools the mapper cannot classify become `kind: other` and fall to the ruleset default (ask);
+they are denied unless a configured judge resolves the action.
 
 ## Allowing or blocking a tool by name
 
@@ -102,5 +145,4 @@ matches; the ruleset default never applies to the name alone.
 - `resources/read` and other MCP methods are forwarded without checks.
 - JSON-RPC batches containing `tools/call` are rejected (the current MCP spec has no batching).
 - Only the stdio transport is supported, not HTTP/SSE servers.
-- Decisions are not persisted yet. M4 adds the tamper-evident audit log through the
-  `on_decision` hook.
+- Decisions are persisted by default to a local JSONL hash chain.
