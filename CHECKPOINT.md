@@ -6,7 +6,7 @@
 - [x] **M3b Agent hooks**: pre-tool hook front-end for Claude Code / Antigravity and Codex, reusing `Gate`
 - [x] **M4 Audit log**: append-only JSONL, hash-chained, `verify` command
 - [x] **M5 AI risk judge**: pluggable LLM client, JSON verdict, fail-closed (OpenAI-compatible transport; model/provider choice deferred)
-- [ ] **M6 CLI + docs**: `circuitbreaker run`, quickstart, example rules, v0.1.0
+- [x] **M6 CLI + docs**: `circuitbreaker run`, quickstart, example rules, v0.1.0
 
 ## Proposed additions
 - [ ] **CI on Windows**: add `windows-latest` to the test matrix

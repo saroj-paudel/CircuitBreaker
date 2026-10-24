@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "circuitbreaker"
-version = "0.0.4"
+version = "0.1.0"
 description = "Local-first, deterministic-first security proxy for AI coding agents."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -15,6 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
+circuitbreaker = "circuitbreaker.__main__:run"
 circuitbreaker-proxy = "circuitbreaker.proxy.__main__:run"
 circuitbreaker-hook = "circuitbreaker.hooks.__main__:run"
 circuitbreaker-audit = "circuitbreaker.audit:main"
